@@ -2,7 +2,7 @@
   "name": "clearcart-support-frontend",
   "private": true,
   "scripts": {
-    "dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
