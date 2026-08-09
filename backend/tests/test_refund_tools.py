@@ -79,6 +79,15 @@ def test_get_order_unknown_id():
     assert result["matches"] == []
 
 
+def test_get_order_id_format_variants():
+    """Voice tends to produce bare numbers ('1001') rather than 'ORD-1001' --
+    all reasonable formats should resolve to the same order."""
+    for variant in ["1001", "1,001", "ord1001", "ORD 1001", "ORD-1001"]:
+        result = get_order(order_id=variant)
+        assert len(result["matches"]) == 1, f"variant {variant!r} failed to match"
+        assert result["matches"][0]["order_id"] == "ORD-1001"
+
+
 def test_get_order_ambiguous_description_match():
     result = get_order(customer_id="CUST-008", description="oak side table")
     assert len(result["matches"]) == 2

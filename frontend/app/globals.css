@@ -254,7 +254,7 @@ main { padding: 2rem 1.75rem 3rem; }
 .chat-input input::placeholder { color: var(--ink-faint); }
 .chat-input input:focus { outline: none; border-color: var(--accent); }
 
-.chat-input button {
+.chat-input button[type="submit"] {
   padding: 0.65rem 1.35rem;
   border: none;
   border-radius: 9px;
@@ -266,8 +266,121 @@ main { padding: 2rem 1.75rem 3rem; }
   font-family: inherit;
 }
 
-.chat-input button:hover:not(:disabled) { background: var(--accent-hover); }
-.chat-input button:disabled { opacity: 0.45; cursor: default; }
+.chat-input button[type="submit"]:hover:not(:disabled) { background: var(--accent-hover); }
+.chat-input button[type="submit"]:disabled { opacity: 0.45; cursor: default; }
+
+.attach-button,
+.mic-button {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.attach-button:hover:not(:disabled),
+.mic-button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.attach-button:disabled,
+.mic-button:disabled { opacity: 0.45; cursor: default; }
+
+.image-attachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 1.25rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.image-attachment button {
+  background: none;
+  border: none;
+  color: inherit;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+
+.mic-button.recording {
+  background: var(--deny);
+  border-color: var(--deny);
+  color: white;
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(248, 113, 113, 0); }
+}
+
+.voice-error {
+  margin: 0 1.25rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--deny-soft);
+  color: var(--deny);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.voice-review {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.25rem;
+  background: var(--paper-raised);
+  border-top: 1px solid var(--line);
+}
+
+.voice-review audio {
+  flex: 1;
+  height: 36px;
+}
+
+.voice-review-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.voice-discard,
+.voice-confirm {
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.voice-discard {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.voice-discard:hover { border-color: var(--deny); color: var(--deny); }
+
+.voice-confirm {
+  background: var(--accent);
+  border: none;
+  color: white;
+}
+
+.voice-confirm:hover { background: var(--accent-hover); }
 
 /* Admin dashboard */
 

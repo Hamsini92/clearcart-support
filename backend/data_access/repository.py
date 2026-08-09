@@ -52,9 +52,24 @@ def get_customer_by_email(email: str) -> Optional[dict]:
     return None
 
 
+def _normalize_order_id(raw: str) -> str:
+    """Normalizes order ID formats so "1001", "1,001", "ord1001", "ORD 1001"
+    all resolve the same as "ORD-1001". Voice in particular tends to produce
+    bare numbers ("1001") rather than the spelled-out "ORD-1001" -- this is
+    a deterministic fix at the data layer, not something left to the LLM to
+    get right by reformatting what it heard."""
+    cleaned = raw.strip().upper().replace(",", "").replace(" ", "").replace("-", "")
+    if cleaned.isdigit():
+        return f"ORD-{cleaned}"
+    if cleaned.startswith("ORD") and cleaned[3:].isdigit():
+        return f"ORD-{cleaned[3:]}"
+    return raw.strip().upper()
+
+
 def get_order(order_id: str) -> Optional[dict]:
+    target = _normalize_order_id(order_id)
     for order in load_orders():
-        if order["order_id"] == order_id:
+        if _normalize_order_id(order["order_id"]) == target:
             return order
     return None
 

@@ -11,3 +11,7 @@ frontend/.next/
 prompt.md
 plan.html
 data/answer_key.md
+
+# Local test recordings used while building voice
+*.m4a
+backend/test.m4a
