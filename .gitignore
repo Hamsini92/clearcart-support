@@ -1,0 +1,13 @@
+.env
+backend/venv/
+backend/.pytest_cache/
+__pycache__/
+*.pyc
+.DS_Store
+frontend/node_modules/
+frontend/.next/
+
+# Internal working docs -- not part of the reviewed deliverable
+prompt.md
+plan.html
+data/answer_key.md

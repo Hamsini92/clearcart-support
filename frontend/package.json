@@ -1,0 +1,21 @@
+{
+  "name": "clearcart-support-frontend",
+  "private": true,
+  "scripts": {
+    "dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null; next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-markdown": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
