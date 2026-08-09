@@ -26,25 +26,53 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="trace-preview">
-            <div className="trace-title">Live reasoning trace</div>
-            <div className="trace-line">
-              <span className="trace-node">Look up customer</span>
-              <span className="trace-text">verified allison.hill.1@example.com</span>
+          <div className="hero-flow-wrap">
+            <div className="hero-seal" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m8.5 12.5 2.5 2.5 5-5" />
+              </svg>
             </div>
-            <div className="trace-line">
-              <span className="trace-node">Look up order</span>
-              <span className="trace-text">ORD-1001 · NovaBuds Earbuds</span>
+          <div className="hero-flow" aria-label="How it works: customer message, agent calls tools, checks policy, then decides">
+            <div className="flow-node flow-pulse" style={{ animationDelay: "0s" }}>
+              <div className="flow-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="5" width="18" height="12" rx="3" />
+                  <path d="M8 17 L8 21 L12 17 Z" fill="currentColor" stroke="none" />
+                </svg>
+              </div>
+              <span>Customer asks</span>
             </div>
-            <div className="trace-line">
-              <span className="trace-node">Check refund policy</span>
-              <span className="trace-text">§10.1</span>
-              <span className="trace-pill approve">approve</span>
+            <div className="flow-connector" />
+            <div className="flow-node flow-pulse" style={{ animationDelay: "1.5s" }}>
+              <div className="flow-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
+                </svg>
+              </div>
+              <span>Agent calls tools</span>
             </div>
-            <div className="trace-line">
-              <span className="trace-node">Process refund</span>
-              <span className="trace-text">$129.99 refunded</span>
+            <div className="flow-connector" />
+            <div className="flow-node flow-pulse" style={{ animationDelay: "3s" }}>
+              <div className="flow-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z" />
+                </svg>
+              </div>
+              <span>Checks policy</span>
             </div>
+            <div className="flow-connector" />
+            <div className="flow-node flow-node--decision flow-pulse" style={{ animationDelay: "4.5s" }}>
+              <div className="flow-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="m8.5 12.5 2.5 2.5 5-5" />
+                </svg>
+              </div>
+              <span>Approves, denies, or escalates</span>
+            </div>
+          </div>
           </div>
         </div>
       </section>

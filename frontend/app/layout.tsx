@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import "./globals.css";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
@@ -15,10 +16,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={manrope.variable}>
       <body>
         <header className="topbar">
-          <div className="brand">
+          <Link href="/" className="brand">
+            <Logo size={26} />
             <span className="brand-mark">ClearCart</span>
             <span className="brand-sub">Support</span>
-          </div>
+          </Link>
           <nav>
             <Link href="/chat">Customer Chat</Link>
             <Link href="/admin">Admin Dashboard</Link>
