@@ -15,11 +15,11 @@ Customer message
 LangGraph agent (Claude, ReAct loop)  ◄──┐
       │  dynamically calls tools          │
       ▼                                   │
-  ┌─────────────────────────────────┐     │
-  │ get_customer   get_order         │     │
-  │ check_refund_policy               │     │
-  │ process_refund escalate_to_human │     │
-  └─────────────────────────────────┘     │
+  ┌─────────────────────────────────────┐  │
+  │ Look up customer  ·  Look up order   │  │
+  │ Check refund eligibility             │  │
+  │ Process refund  ·  Escalate to human │  │
+  └─────────────────────────────────────┘  │
       │ result fed back to the agent ─────┘
       ▼
 verify gate (deterministic) — confirms the reply

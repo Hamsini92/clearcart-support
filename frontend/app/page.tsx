@@ -29,20 +29,20 @@ export default function Home() {
           <div className="trace-preview">
             <div className="trace-title">Live reasoning trace</div>
             <div className="trace-line">
-              <span className="trace-node">get_customer</span>
+              <span className="trace-node">Look up customer</span>
               <span className="trace-text">verified allison.hill.1@example.com</span>
             </div>
             <div className="trace-line">
-              <span className="trace-node">get_order</span>
+              <span className="trace-node">Look up order</span>
               <span className="trace-text">ORD-1001 · NovaBuds Earbuds</span>
             </div>
             <div className="trace-line">
-              <span className="trace-node">check_refund_policy</span>
+              <span className="trace-node">Check refund policy</span>
               <span className="trace-text">§10.1</span>
               <span className="trace-pill approve">approve</span>
             </div>
             <div className="trace-line">
-              <span className="trace-node">process_refund</span>
+              <span className="trace-node">Process refund</span>
               <span className="trace-text">$129.99 refunded</span>
             </div>
           </div>
