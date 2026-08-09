@@ -13,6 +13,38 @@ ORDERS_PATH = DATA_DIR / "loopp_orders.json"
 POLICY_PATH = DATA_DIR / "loopp_policy.md"
 
 
+class TransientLookupError(Exception):
+    """Simulates a real-world flaky dependency (a CRM/order-service call that
+    times out) -- the retryable half of the failure taxonomy. A genuine
+    business outcome like "order not found" is never raised as an exception;
+    it's a normal return value, precisely so retry logic (agent/graph.py's
+    _dispatch_tool_with_retry) can't accidentally retry it. graph.py is what
+    actually retries and logs this."""
+
+
+_simulated_failures_used: set = set()
+
+
+def _simulated_failure_config():
+    """Read fresh on every call (same pattern as MOCK_TODAY in get_today())
+    so tests can flip these env vars per-test rather than being stuck with
+    whatever was set at import time.
+      SIMULATE_TOOL_FAILURE_ORDER_ID -- which order_id's lookup fails
+      SIMULATE_TOOL_FAILURE_MODE     -- "once" (default: fails first call,
+                                         recovers after) or "always" (every
+                                         call fails -- for testing/demoing
+                                         the exhausted-retries path)
+      DEMO_FAIL_FIRST_ORDER_LOOKUP=true -- shorthand alias for ORD-1001/once,
+                                            used unless an explicit order_id
+                                            is already set above
+    """
+    order_id = os.environ.get("SIMULATE_TOOL_FAILURE_ORDER_ID")
+    if not order_id and os.environ.get("DEMO_FAIL_FIRST_ORDER_LOOKUP", "").lower() == "true":
+        order_id = "ORD-1001"
+    mode = os.environ.get("SIMULATE_TOOL_FAILURE_MODE", "once")
+    return order_id, mode
+
+
 def get_today() -> date:
     """Live clock by default. MOCK_TODAY (YYYY-MM-DD) overrides it for demos/tests."""
     override = os.environ.get("MOCK_TODAY")
@@ -68,6 +100,11 @@ def _normalize_order_id(raw: str) -> str:
 
 def get_order(order_id: str) -> Optional[dict]:
     target = _normalize_order_id(order_id)
+    sim_order_id, sim_mode = _simulated_failure_config()
+    if sim_order_id and target == _normalize_order_id(sim_order_id):
+        if sim_mode == "always" or target not in _simulated_failures_used:
+            _simulated_failures_used.add(target)
+            raise TransientLookupError(f"order lookup service timed out looking up {target}")
     for order in load_orders():
         if _normalize_order_id(order["order_id"]) == target:
             return order

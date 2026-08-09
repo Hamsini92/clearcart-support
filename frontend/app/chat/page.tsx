@@ -290,6 +290,33 @@ export default function ChatPage() {
     sendVoice(blob, extension, image);
   }
 
+  /** Real customers each get their own device and their own thread_id
+   * automatically -- this button exists for testing/demoing multiple
+   * customers back-to-back in one browser tab, which is not otherwise a
+   * real scenario. Starts a genuinely new thread_id rather than reusing the
+   * old one, so no state (identity, order, decision, tool-call budget)
+   * carries over from whoever the previous conversation was. */
+  function startNewChat() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
+    }
+    cleanupSilenceDetection();
+    if (recordedClip) URL.revokeObjectURL(recordedClip.url);
+
+    threadId.current = crypto.randomUUID();
+    sending.current = false;
+    setMessages([]);
+    setInput("");
+    setPending(false);
+    setPendingText("");
+    setRecording(false);
+    setRecordedClip(null);
+    setVoiceError(null);
+    setAttachedImage(null);
+  }
+
   return (
     <div className="chat-shell">
       <div className="page-narrow">
@@ -308,6 +335,15 @@ export default function ChatPage() {
                 Online now
               </div>
             </div>
+            <button
+              type="button"
+              className="new-chat-button"
+              onClick={startNewChat}
+              disabled={messages.length === 0 && !pending}
+              title="Start a new conversation as a different customer"
+            >
+              New chat
+            </button>
           </div>
 
           <div className="chat-thread">

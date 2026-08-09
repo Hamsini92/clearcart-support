@@ -133,6 +133,21 @@ main { padding: 2rem 1.75rem 3rem; }
   margin-top: 0.15rem;
 }
 
+.new-chat-button {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.new-chat-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.24); }
+.new-chat-button:disabled { opacity: 0.45; cursor: default; }
+
 .chat-widget-status .dot {
   width: 6px;
   height: 6px;
@@ -575,6 +590,9 @@ main { padding: 2rem 1.75rem 3rem; }
 .pill.approve { background: var(--approve-soft); color: var(--approve); }
 .pill.deny { background: var(--deny-soft); color: var(--deny); }
 .pill.escalate { background: var(--escalate-soft); color: var(--escalate); }
+.pill.retry { background: var(--accent-soft); color: var(--accent); text-transform: none; letter-spacing: 0; }
+
+.log-card.retry-event { border-left-color: var(--accent); }
 
 .log-thread {
   font-size: 0.72rem;
@@ -584,6 +602,51 @@ main { padding: 2rem 1.75rem 3rem; }
 }
 
 .log-summary { margin-top: 0.35rem; font-size: 0.88rem; color: var(--ink); }
+
+.policy-checklist {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.policy-checklist li {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.check-clause {
+  font-family: "SF Mono", Consolas, Menlo, monospace;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.check-desc { color: var(--ink-soft); }
+
+.check-mark {
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-checklist li.pass .check-mark { color: var(--approve); }
+.policy-checklist li.fail .check-mark { color: var(--deny); }
+.policy-checklist-amount { border-top: 1px dashed var(--line); padding-top: 0.3rem; }
+.policy-checklist-amount .check-mark { color: var(--ink); }
+.policy-checklist-final { border-top: 1px solid var(--line); padding-top: 0.35rem; }
+.policy-checklist-final.decision-approve .check-mark { color: var(--approve); }
+.policy-checklist-final.decision-deny .check-mark { color: var(--deny); }
+.policy-checklist-final.decision-escalate .check-mark { color: var(--escalate); }
 
 .log-details summary {
   margin-top: 0.4rem;

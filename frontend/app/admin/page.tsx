@@ -149,14 +149,43 @@ export default function AdminPage() {
         {visibleEvents.map((ev, i) => {
           const decision = decisionOf(ev);
           const minor = isMinor(ev);
+          const checks = ev.tool === "check_refund_policy" ? ev.output?.checks : undefined;
+          const isRetryEvent = ev.node === "tools" && Boolean(ev.status);
           return (
-            <div key={i} className={`log-card ${decision ? `decision-${decision}` : ""} ${minor ? "minor" : ""}`}>
+            <div
+              key={i}
+              className={`log-card ${decision ? `decision-${decision}` : ""} ${minor ? "minor" : ""} ${isRetryEvent ? "retry-event" : ""}`}
+            >
               <div className="log-head">
                 <span className="log-node-tag">{ev.node}{ev.tool ? ` · ${ev.tool}` : ""}</span>
                 {decision && <span className={`pill ${decision}`}>{decision}</span>}
+                {isRetryEvent && <span className="pill retry">{ev.status as string}</span>}
                 {ev.thread_id && <span className="log-thread">{ev.thread_id}</span>}
               </div>
               <div className="log-summary">{summarize(ev)}</div>
+              {checks && checks.length > 0 && (
+                <ul className="policy-checklist">
+                  {checks.map((c, ci) => (
+                    <li key={ci} className={c.passed ? "pass" : "fail"}>
+                      <span className="check-clause">{c.clause}</span>
+                      <span className="check-desc">{c.description}</span>
+                      <span className="check-mark">{c.passed ? "PASS" : "FAIL"}</span>
+                    </li>
+                  ))}
+                  {typeof ev.output?.refund_amount === "number" && (
+                    <li className="policy-checklist-amount">
+                      <span className="check-clause">{ev.output?.clause}</span>
+                      <span className="check-desc">calculated refund amount</span>
+                      <span className="check-mark">${ev.output.refund_amount.toFixed(2)}</span>
+                    </li>
+                  )}
+                  <li className={`policy-checklist-final decision-${ev.output?.decision}`}>
+                    <span className="check-clause">Final</span>
+                    <span className="check-desc">decision</span>
+                    <span className="check-mark">{String(ev.output?.decision).toUpperCase()}</span>
+                  </li>
+                </ul>
+              )}
               <details className="log-details">
                 <summary>View raw event</summary>
                 <pre>{JSON.stringify(ev, null, 2)}</pre>

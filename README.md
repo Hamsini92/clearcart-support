@@ -2,9 +2,12 @@
 
 An AI agent that processes or denies e-commerce refund requests for **ClearCart**, a mock online retailer, by dynamically calling tools to check a real, written refund policy — not by guessing. Built for the Loopp AI Customer Support Agent assessment.
 
-- **Customer chat** — a support widget where customers ask about returns/refunds
+- **Customer chat** — a support widget where customers ask about returns/refunds, by typing or by voice
+- **Voice** — push-to-talk: Whisper transcribes the customer's speech, the same agent reasons over it, and the reply is spoken back via TTS. Not a separate implementation of the agent — voice and text both call the exact same `run_agent_turn()`, only the I/O differs.
+- **Image evidence** — a customer claiming damage can attach a photo; Claude's own vision looks at it and judges whether it actually supports the claim before any damage-based refund is considered (policy §4.2).
 - **Admin dashboard** — a live, real-time stream of the agent's reasoning: every tool call, every policy citation, every decision, as it happens
 - **Deterministic policy engine** — refund eligibility (return windows, non-refundable categories, loyalty exceptions, fraud/abuse checks) is computed in code, not left to the LLM's judgment. The LLM's job is to gather the right information and explain the outcome, not to compute it.
+- **Transient failure handling** — order/CRM lookups can hit a genuine infrastructure hiccup (a timeout, a dropped connection). Those are retried once, automatically, and logged as failed → retrying → recovered in the admin dashboard. A real business outcome like "order not found" is never retried — it isn't a glitch, so retrying it wouldn't help. See `DEMO_FAIL_FIRST_ORDER_LOOKUP` in `.env.example` to trigger this live.
 
 ## How it works
 
@@ -49,7 +52,7 @@ Response + full reasoning trace
 
 ## Setup & run
 
-Requires Python 3.9+, Node 18+, and an [Anthropic API key](https://console.anthropic.com/).
+Requires Python 3.9+, Node 18+, and an [Anthropic API key](https://console.anthropic.com/). An [OpenAI API key](https://platform.openai.com/api-keys) is only needed if you want to try voice (Whisper STT + TTS) — text chat and image evidence work fully without one.
 
 ### 1. Backend
 
@@ -102,6 +105,10 @@ The agent verifies identity before discussing an order — state your name and r
 > "Hi, this is James Martin. I want to return my oak side table." *(no order ID)*
 > *(email: james.martin.8@example.com)*
 → Finds two matching orders, asks which one before proceeding — visible as a retry step in the admin log.
+
+**Voice:** on the chat page, click the mic, speak one of the scenarios above instead of typing it, and confirm on the review screen before sending — the reply comes back as speech too.
+
+**Image evidence:** claim a damaged item (e.g. ORD-1013) and attach a photo (via the paperclip icon in text chat, or the mic review screen in voice) when the agent asks for one. Try both a genuine damage photo and an unrelated one (`demo_assets/`) to see the agent actually judge the image rather than treat its mere presence as proof.
 
 All 15 customers and 20 orders are in `data/loopp_crm.json` and `data/loopp_orders.json` if you want to explore other scenarios (denials, escalations for fraud/abuse flags, high-value manual review, etc.) — the full rules are in `data/loopp_policy.md`.
 
@@ -159,7 +166,7 @@ data/
 
 **No authentication.** The admin dashboard has no access control right now — anyone reaching the URL can see customer data and the full reasoning trace. The customer chat's "identity verification" is just an asked-for email, not a real authenticated session. In production: the admin dashboard needs real auth + role-based access; the customer chat should inherit an authenticated session from the host e-commerce platform (the way real embedded support widgets like Intercom do), not accept a typed, unverified email.
 
-**Voice.** Not implemented in this submission — the remaining time was prioritized toward a fully working, well-tested text experience across all four decision types (approve, deny, escalate, ambiguous-match retry) rather than a rushed voice integration. A push-to-talk pipeline (Whisper STT → the same LangGraph agent → TTS) was the planned approach specifically so voice would reuse the identical reasoning core as text, rather than a second, forked implementation.
+**Voice.** Implemented — push-to-talk, Whisper STT, the same LangGraph agent as text, TTS reply. Known limitations: transcription errors on ambiguous speech (e.g. spoken order numbers) aren't corrected by the agent beyond the order-ID normalization already in `repository.py`; there's no interruption/barge-in while the reply is being spoken; and it depends on OpenAI's API being reachable (Whisper + TTS), separate from Anthropic's, so a voice-specific outage doesn't affect text chat at all since the two are wired to different providers behind the same agent core.
 
 **AWS / cloud deployment.** Not deployed — this runs locally by design for review. Target production architecture: ECS Fargate for the backend, RDS Postgres in place of the flat JSON files (the repository-pattern data layer already isolates this change), S3 + CloudFront for the frontend, an ALB with WebSocket support for the live log stream, Secrets Manager for API keys, GitHub Actions for CI/CD.
 

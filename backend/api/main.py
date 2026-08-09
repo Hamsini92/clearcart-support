@@ -39,7 +39,19 @@ app.add_middleware(
 )
 
 graph = build_graph()
-openai_client = OpenAI()
+
+_openai_client = None
+
+
+def get_openai_client() -> OpenAI:
+    """Lazy singleton -- only instantiated (and only requires OPENAI_API_KEY)
+    when a voice request actually comes in. Text chat must work with no
+    OpenAI key configured at all, since voice is an optional bonus feature,
+    not a dependency of the core agent."""
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI()
+    return _openai_client
 
 
 MAX_HISTORY = 300
@@ -95,11 +107,16 @@ async def run_agent_turn(thread_id: str, content: list) -> tuple[str, list]:
     config = {"configurable": {"thread_id": thread_id}}
     input_state = {
         "messages": [{"role": "user", "content": content}],
-        # Reset per-turn state explicitly -- last_decision/verify_retry_count must not leak
-        # from a previous turn, or verify ends up checking this turn's reply against a stale
-        # decision (e.g. a plain "you're welcome" gets flagged for not citing an old clause).
+        # Reset per-turn state explicitly -- none of this may leak from a previous turn.
+        # last_decision/verify_retry_count: verify would check this turn's reply against a
+        # stale decision (e.g. a plain "you're welcome" flagged for not citing an old clause).
+        # step_count: MAX_AGENT_STEPS is a runaway-loop guard for ONE turn, not a lifetime
+        # budget for the whole thread -- without this reset it accumulates across every turn
+        # ever sent on this thread_id and eventually trips safety_stop on a perfectly valid
+        # new request.
         "last_decision": None,
         "verify_retry_count": 0,
+        "step_count": 0,
     }
 
     collected_events = []
@@ -142,7 +159,8 @@ async def voice(
 ):
     audio_bytes = await audio.read()
 
-    transcription = openai_client.audio.transcriptions.create(
+    client = get_openai_client()
+    transcription = client.audio.transcriptions.create(
         model="whisper-1",
         file=(audio.filename or "recording.webm", audio_bytes),
     )
@@ -162,7 +180,7 @@ async def voice(
 
     reply, collected_events = await run_agent_turn(thread_id, content)
 
-    speech = openai_client.audio.speech.create(
+    speech = client.audio.speech.create(
         model="tts-1",
         voice="alloy",
         input=reply,

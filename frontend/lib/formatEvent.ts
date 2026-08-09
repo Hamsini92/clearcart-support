@@ -3,7 +3,16 @@ export type LogEvent = {
   node: string;
   tool?: string;
   input?: Record<string, unknown>;
-  output?: { decision?: string; clause?: string; reason?: string; refund_amount?: number; found?: boolean; matches?: unknown[]; [key: string]: unknown };
+  output?: {
+    decision?: string;
+    clause?: string;
+    reason?: string;
+    refund_amount?: number;
+    found?: boolean;
+    matches?: unknown[];
+    checks?: { clause: string; description: string; passed: boolean }[];
+    [key: string]: unknown;
+  };
   result?: string;
   reason?: string;
   [key: string]: unknown;
@@ -36,6 +45,17 @@ export function summarize(ev: LogEvent): string {
   }
 
   if (ev.node === "tools") {
+    // Retry-path events (simulated transient lookup failure) carry `status`
+    // instead of `output` -- handle those before the per-tool switch below,
+    // which assumes a completed call.
+    if (ev.status) {
+      const err = ev.error as string | undefined;
+      if (ev.status === "failed, retrying") return `${ev.tool} call failed (${err ?? "transient error"}) -- retrying`;
+      if (ev.status === "recovered on retry") return `${ev.tool} succeeded on retry`;
+      if (ev.status === "failed again, giving up") return `${ev.tool} failed again after retry (${err ?? "transient error"})`;
+      return `${ev.tool} -- ${ev.status}`;
+    }
+
     switch (ev.tool) {
       case "get_customer": {
         const found = ev.output?.found;

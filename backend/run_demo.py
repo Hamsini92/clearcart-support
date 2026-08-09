@@ -27,6 +27,7 @@ def run_turn(graph, thread_id, user_text):
         "messages": [{"role": "user", "content": [{"type": "text", "text": user_text}]}],
         "last_decision": None,
         "verify_retry_count": 0,
+        "step_count": 0,
     }
 
     print(f"\n>>> Customer: {user_text}")
