@@ -167,8 +167,8 @@ export default function ChatPage() {
       if (image) formData.append("image", image);
 
       const res = await fetch(`${API_BASE}/voice`, { method: "POST", body: formData });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Server returned ${res.status}`);
 
       setMessages((prev) => [
         ...prev,
@@ -185,10 +185,11 @@ export default function ChatPage() {
       audio.play().catch(() => {
         // Autoplay can be blocked by the browser; the text reply is already shown either way.
       });
-    } catch {
+    } catch (err) {
+      const detail = err instanceof Error && err.message ? err.message : "Sorry, something went wrong with voice.";
       setMessages((prev) => [
         ...prev,
-        { role: "agent", text: "Sorry, something went wrong with voice. Please try again.", at: new Date() },
+        { role: "agent", text: `${detail} Please try again.`, at: new Date() },
       ]);
     } finally {
       setPending(false);

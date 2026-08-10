@@ -11,30 +11,30 @@ An AI agent that processes or denies e-commerce refund requests for **ClearCart*
 
 ## How it works
 
+```mermaid
+flowchart TB
+    Customer([Customer]) --> ChatUI["Customer Chat UI<br/>text · voice · image"]
+    Admin([Support Admin]) --> AdminUI["Admin Dashboard<br/>live reasoning trace"]
+
+    ChatUI -->|HTTPS| API["FastAPI Backend<br/>/chat · /voice · /ws/admin"]
+    AdminUI -->|WebSocket| API
+
+    API -->|function call| Agent["LangGraph Agent — Claude<br/>reasoning · tool routing · verify gate"]
+    API -->|REST, audio| OpenAI["OpenAI API<br/>whisper-1 · tts-1<br/>I/O only — no reasoning"]
+
+    Agent -->|tool_use| Anthropic["Anthropic API<br/>claude-sonnet-5"]
+    Agent <-->|tool call / result| Tools["Refund Tools<br/>look up customer/order · check policy<br/>process refund · escalate to human"]
+
+    Tools --> Data[("Repository<br/>customers · orders · policy")]
+
+    classDef reason fill:#0f8f82,stroke:#0f8f82,color:#fff;
+    class Agent,Anthropic reason;
 ```
-Customer message
-      │
-      ▼
-LangGraph agent (Claude, ReAct loop)  ◄──┐
-      │  dynamically calls tools          │
-      ▼                                   │
-  ┌─────────────────────────────────────┐  │
-  │ Look up customer  ·  Look up order   │  │
-  │ Check refund eligibility             │  │
-  │ Process refund  ·  Escalate to human │  │
-  └─────────────────────────────────────┘  │
-      │ result fed back to the agent ─────┘
-      ▼
-verify gate (deterministic) — confirms the reply
-cites the real clause the policy tool returned,
-before anything reaches the customer
-      │
-      ▼
-Response + full reasoning trace
-      │                    │
-      ▼                    ▼
- Customer chat      Admin dashboard (WebSocket, live)
-```
+
+Claude (Orchestration layer) decides what to check and which tool to call next. Fixed Python (Business Logic layer)
+computes refund eligibility and dollar amounts — never the model. OpenAI converts speech at the API boundary only;
+it never reasons about a request. A fuller version of this diagram, plus an on-camera narration script, lives in
+[`docs/demo-prep/architecture-overview.html`](docs/demo-prep/architecture-overview.html).
 
 **Single agent, not multi-agent.** One reasoning loop, five tools, each doing one narrow thing a real support rep could do. See [Future scope](#future-scope) for when multi-agent would actually become the right call.
 
@@ -177,3 +177,5 @@ Single agent is the right shape for one narrow task — refund policy applied to
 - **Fraud-investigation agent** — picks up exactly where the current escalation path (§6/§9) leaves off, pulling full account history and producing a synthesized brief for a human reviewer instead of a raw "pending review" flag.
 
 MCP (Model Context Protocol) becomes worth adopting at that same point — if multiple agents end up sharing tools like `get_customer`, exposing them as an MCP server avoids duplicate integrations. With a single agent today, direct in-process calls are simpler and correct.
+
+**Full-duplex voice (OpenAI Realtime API).** Voice is already implemented — push-to-talk, Whisper transcribes, Claude reasons, TTS speaks the reply. The Realtime API was deliberately not used: it's a single model that listens, reasons, *and* speaks over one streaming connection, including making its own tool calls — using it would mean GPT, not Claude, approving refunds during voice conversations, which breaks the one-agent design above. Worth revisiting only if natural, interruption-capable conversation becomes a real requirement, and even then the fix is either accepting two independent reasoning agents (text vs. voice) or building a proper audio-relay layer that keeps Claude as the sole decision-maker.

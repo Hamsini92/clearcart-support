@@ -22,9 +22,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from openai import OpenAI  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
 
 from agent.graph import build_graph  # noqa: E402
 
@@ -43,14 +43,15 @@ graph = build_graph()
 _openai_client = None
 
 
-def get_openai_client() -> OpenAI:
+def get_openai_client() -> AsyncOpenAI:
     """Lazy singleton -- only instantiated (and only requires OPENAI_API_KEY)
     when a voice request actually comes in. Text chat must work with no
     OpenAI key configured at all, since voice is an optional bonus feature,
-    not a dependency of the core agent."""
+    not a dependency of the core agent. Async client: a slow Whisper/TTS
+    round-trip must not block the event loop that /chat and /ws/admin share."""
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI()
+        _openai_client = AsyncOpenAI()
     return _openai_client
 
 
@@ -158,12 +159,19 @@ async def voice(
     image: UploadFile = File(None),
 ):
     audio_bytes = await audio.read()
-
     client = get_openai_client()
-    transcription = client.audio.transcriptions.create(
-        model="whisper-1",
-        file=(audio.filename or "recording.webm", audio_bytes),
-    )
+
+    try:
+        transcription = await client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(audio.filename or "recording.webm", audio_bytes),
+        )
+    except Exception as e:
+        await admin_stream.broadcast({
+            "thread_id": thread_id, "node": "voice", "stage": "transcribe",
+            "status": "failed", "error": str(e),
+        })
+        raise HTTPException(status_code=502, detail="Couldn't transcribe your audio. Please try again.")
     transcript = transcription.text
 
     content = [{"type": "text", "text": transcript}]
@@ -180,11 +188,21 @@ async def voice(
 
     reply, collected_events = await run_agent_turn(thread_id, content)
 
-    speech = client.audio.speech.create(
-        model="tts-1",
-        voice="alloy",
-        input=reply,
-    )
+    try:
+        speech = await client.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=reply,
+        )
+    except Exception as e:
+        await admin_stream.broadcast({
+            "thread_id": thread_id, "node": "voice", "stage": "synthesize",
+            "status": "failed", "error": str(e),
+        })
+        raise HTTPException(
+            status_code=502,
+            detail="Got a reply but couldn't speak it aloud. The text reply is still available.",
+        )
     audio_base64 = base64.b64encode(speech.content).decode("utf-8")
 
     return {
