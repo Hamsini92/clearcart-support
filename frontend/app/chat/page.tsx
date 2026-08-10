@@ -176,13 +176,16 @@ export default function ChatPage() {
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || sending.current) return;
+    const imageToSend = attachedImage;
+    // An attachment alone is a valid message -- a customer submitting damage
+    // evidence with nothing typed shouldn't be silently blocked from sending.
+    if ((!trimmed && !imageToSend) || sending.current) return;
     sending.current = true;
 
-    const imageToSend = attachedImage;
+    const messageText = trimmed || "Here's a photo.";
     setMessages((prev) => [
       ...prev,
-      { role: "customer", text: imageToSend ? `${trimmed} (photo attached: ${imageToSend.name})` : trimmed, at: new Date() },
+      { role: "customer", text: imageToSend ? `${messageText} (photo attached: ${imageToSend.name})` : messageText, at: new Date() },
     ]);
     setInput("");
     setAttachedImage(null);
@@ -192,7 +195,7 @@ export default function ChatPage() {
     try {
       const formData = new FormData();
       formData.append("thread_id", threadId.current);
-      formData.append("message", trimmed);
+      formData.append("message", messageText);
       if (imageToSend) formData.append("image", imageToSend);
 
       const res = await fetch(`${API_BASE}/chat`, { method: "POST", body: formData });
@@ -499,13 +502,15 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordedClip]);
 
-  /** Real customers each get their own device and their own thread_id
-   * automatically -- this button exists for testing/demoing multiple
-   * customers back-to-back in one browser tab, which is not otherwise a
-   * real scenario. Starts a genuinely new thread_id rather than reusing the
-   * old one, so no state (identity, order, decision, tool-call budget)
-   * carries over from whoever the previous conversation was. */
-  function startNewChat() {
+  /** Releases the mic and closes the voice WebSocket -- used both when
+   * starting a fresh conversation and when the page unmounts (nav bar's
+   * "home" link is a Next.js <Link>, i.e. client-side navigation with no
+   * full page reload, so nothing stops an in-progress recording or an open
+   * Realtime connection unless something here explicitly does it; left
+   * alone, the mic would stay hot and the backend would keep the OpenAI
+   * connection open -- billed connection time -- until the server's own
+   * 120s guardrail eventually forces it closed). */
+  function stopAllVoiceActivity() {
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.onstop = null;
       mediaRecorderRef.current.stop();
@@ -513,6 +518,18 @@ export default function ChatPage() {
     }
     cleanupSilenceDetection();
     cleanupVoiceSocket();
+  }
+
+  useEffect(() => stopAllVoiceActivity, []);
+
+  /** Real customers each get their own device and their own thread_id
+   * automatically -- this button exists for testing/demoing multiple
+   * customers back-to-back in one browser tab, which is not otherwise a
+   * real scenario. Starts a genuinely new thread_id rather than reusing the
+   * old one, so no state (identity, order, decision, tool-call budget)
+   * carries over from whoever the previous conversation was. */
+  function startNewChat() {
+    stopAllVoiceActivity();
     if (recordedClip) URL.revokeObjectURL(recordedClip.url);
 
     threadId.current = crypto.randomUUID();

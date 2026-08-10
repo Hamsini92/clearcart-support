@@ -53,12 +53,39 @@ fuller version of this diagram, plus an on-camera narration script, lives in
 
 ### Voice pipeline (OpenAI Realtime API)
 
-Voice is push-to-talk over a WebSocket (`/ws/voice/{thread_id}`), not a one-shot record-and-upload. While the
-customer talks, raw mic audio streams to the backend in ~170ms PCM16 chunks, which relays it to an OpenAI Realtime
-session (`client.realtime.connect(...)`) and gets back live, VAD-segmented captions as they speak — visible on
-both the recording indicator and the review screen. Transcription is `gpt-4o-mini-transcribe` with the language
-pinned to English (`"language": "en"` in the session config) — without that pin, short utterances can occasionally
-get misidentified and transcribed in the wrong script entirely.
+Voice uses a real-time push-to-talk WebSocket at:
+
+`/ws/voice/{thread_id}`
+
+The customer microphone streams PCM16 audio to the FastAPI backend, which relays it to the OpenAI Realtime API for
+streaming transcription. Partial transcripts are displayed as live captions while the customer speaks.
+
+When the turn is complete, the final transcript is sent to the same `run_agent_turn()` function used by text chat:
+
+```text
+Microphone
+    ↓
+WebSocket
+    ↓
+OpenAI Realtime API
+Streaming speech-to-text
+    ↓
+Final transcript
+    ↓
+LangGraph agent
+    ↓
+Claude
+    ↕
+Refund tools
+    ↓
+Verification gate
+    ↓
+Validated text response
+    ↓
+OpenAI TTS
+    ↓
+Spoken response
+```
 
 The Realtime API is also a full speech-to-speech model that can listen, reason, *and* reply — including making its
 own tool calls — over that same connection. That part is deliberately turned off (`turn_detection.create_response:

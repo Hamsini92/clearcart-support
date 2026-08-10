@@ -41,7 +41,7 @@ def _simulated_failure_config():
     order_id = os.environ.get("SIMULATE_TOOL_FAILURE_ORDER_ID")
     if not order_id and os.environ.get("DEMO_FAIL_FIRST_ORDER_LOOKUP", "").lower() == "true":
         order_id = "ORD-1001"
-    mode = os.environ.get("SIMULATE_TOOL_FAILURE_MODE", "once")
+    mode = os.environ.get("SIMULATE_TOOL_FAILURE_MODE", "once").lower()
     return order_id, mode
 
 
