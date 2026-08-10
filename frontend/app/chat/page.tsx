@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { API_BASE } from "@/lib/config";
+import { API_BASE, WS_BASE } from "@/lib/config";
 
 type Message = { role: "customer" | "agent"; text: string; at: Date };
 type RecordedClip = { blob: Blob; extension: string; url: string };
@@ -86,10 +86,56 @@ async function resizeImageFile(file: File, maxDimension = 1600, quality = 0.82):
   return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
 }
 
-/** Instant, free, local acknowledgment while the real request (Whisper -> agent
- * -> TTS) is still in flight -- uses the browser's built-in voice, not the
- * OpenAI pipeline, specifically so it can speak immediately with no network
- * round trip. Feature-detected; silently does nothing if unsupported. */
+const REALTIME_SAMPLE_RATE = 24000; // required by the OpenAI Realtime API's pcm16 input format
+
+/** The Realtime API expects pcm16 at 24kHz; browsers hand back whatever the
+ * mic's native rate is (commonly 44.1/48kHz) even when an AudioContext asks
+ * for 24kHz, depending on the browser. Linear interpolation is good enough
+ * for speech-to-text -- no need for a proper resampling filter here. */
+function resampleTo24k(input: Float32Array, inputRate: number): Float32Array {
+  if (inputRate === REALTIME_SAMPLE_RATE) return input;
+  const ratio = inputRate / REALTIME_SAMPLE_RATE;
+  const outLength = Math.round(input.length / ratio);
+  const output = new Float32Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const srcIndex = i * ratio;
+    const i0 = Math.floor(srcIndex);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = srcIndex - i0;
+    output[i] = input[i0] + (input[i1] - input[i0]) * frac;
+  }
+  return output;
+}
+
+function floatTo16BitPCM(input: Float32Array): Int16Array {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return output;
+}
+
+function int16ToBase64(pcm: Int16Array): string {
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Instant, free, local acknowledgment while the real request (agent -> TTS)
+ * is still in flight -- uses the browser's built-in voice, not the OpenAI
+ * pipeline, specifically so it can speak immediately with no network round
+ * trip. Feature-detected; silently does nothing if unsupported. */
 function speakInterim(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
@@ -107,6 +153,7 @@ export default function ChatPage() {
   const [recording, setRecording] = useState(false);
   const [recordedClip, setRecordedClip] = useState<RecordedClip | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -115,6 +162,17 @@ export default function ChatPage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceRafRef = useRef<number | null>(null);
+  const recordingLimitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // OpenAI Realtime voice pipeline -- one WebSocket + one Web Audio capture
+  // graph per push-to-talk turn, opened in startRecording() and torn down
+  // after finalize/cancel. See backend/api/main.py's ws_voice() for the
+  // wire protocol.
+  const voiceSocketRef = useRef<WebSocket | null>(null);
+  const pcmContextRef = useRef<AudioContext | null>(null);
+  const pcmSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const pcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const transcriptPartsRef = useRef<string[]>([]);
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -152,62 +210,113 @@ export default function ChatPage() {
     }
   }
 
-  async function sendVoice(blob: Blob, extension: string, image: File | null) {
-    if (sending.current) return;
-    sending.current = true;
-    setPending(true);
-    const phrase = pickCheckingPhrase();
-    setPendingText(phrase);
-    speakInterim(phrase);
+  const finalizeImageNameRef = useRef<string | null>(null);
 
-    try {
-      const formData = new FormData();
-      formData.append("audio", blob, `recording.${extension}`);
-      formData.append("thread_id", threadId.current);
-      if (image) formData.append("image", image);
-
-      const res = await fetch(`${API_BASE}/voice`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Server returned ${res.status}`);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "customer",
-          text: image ? `${data.transcript} (photo attached: ${image.name})` : data.transcript,
-          at: new Date(),
-        },
-        { role: "agent", text: data.reply, at: new Date() },
-      ]);
-
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      const audio = new Audio(`data:audio/mpeg;base64,${data.audio_base64}`);
-      audio.play().catch(() => {
-        // Autoplay can be blocked by the browser; the text reply is already shown either way.
-      });
-    } catch (err) {
-      const detail = err instanceof Error && err.message ? err.message : "Sorry, something went wrong with voice.";
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", text: `${detail} Please try again.`, at: new Date() },
-      ]);
-    } finally {
-      setPending(false);
-      sending.current = false;
-    }
+  /** Routes every message from the voice WebSocket. One handler, attached
+   * once per push-to-talk turn in startRecording() -- it has to distinguish
+   * a guardrail/error hit *while still recording* (auto-stop into review,
+   * nothing lost) from one hit *after* finalize was sent (terminal, shown as
+   * a chat bubble like the old REST error path did). mediaRecorderRef's
+   * live .state is used rather than the `recording` React state so this
+   * doesn't need to be redefined (and risk a stale closure) on every render. */
+  function attachVoiceSocketHandlers(ws: WebSocket) {
+    ws.onmessage = (event) => {
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      switch (data.type) {
+        case "transcript_delta":
+          transcriptPartsRef.current.push(data.text);
+          setLiveTranscript(transcriptPartsRef.current.join(" "));
+          break;
+        case "error":
+          if (data.stage === "guardrail" && mediaRecorderRef.current?.state === "recording") {
+            setVoiceError(data.message);
+            stopRecording();
+          } else if (sending.current) {
+            // Backend error messages are already complete, customer-facing
+            // sentences (e.g. "...Please try again.") -- don't append another.
+            setMessages((prev) => [
+              ...prev,
+              { role: "agent", text: data.message, at: new Date() },
+            ]);
+            setPending(false);
+            sending.current = false;
+            cleanupVoiceSocket();
+          } else {
+            setVoiceError(data.message);
+            cleanupVoiceSocket();
+          }
+          break;
+        case "final": {
+          const image = finalizeImageNameRef.current;
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "customer",
+              text: image ? `${data.transcript} (photo attached: ${image})` : data.transcript,
+              at: new Date(),
+            },
+            { role: "agent", text: data.reply, at: new Date() },
+          ]);
+          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+          if (data.audio_base64) {
+            new Audio(`data:audio/mpeg;base64,${data.audio_base64}`).play().catch(() => {
+              // Autoplay can be blocked by the browser; the text reply is already shown either way.
+            });
+          }
+          setPending(false);
+          sending.current = false;
+          cleanupVoiceSocket();
+          break;
+        }
+      }
+    };
+    ws.onerror = () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        setVoiceError("Voice connection failed. Please try again.");
+        stopRecording();
+      }
+    };
   }
 
   const SILENCE_THRESHOLD = 8; // 0-255 scale; empirical, room-noise dependent
   const SILENCE_DURATION_MS = 5000;
+  const MAX_RECORDING_MS = 90_000; // client-side backstop; the server enforces a harder 120s cap independently
 
   function cleanupSilenceDetection() {
     if (silenceRafRef.current) cancelAnimationFrame(silenceRafRef.current);
     silenceRafRef.current = null;
     if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     silenceTimeoutRef.current = null;
+    if (recordingLimitTimeoutRef.current) clearTimeout(recordingLimitTimeoutRef.current);
+    recordingLimitTimeoutRef.current = null;
     audioContextRef.current?.close().catch(() => {});
     audioContextRef.current = null;
     analyserRef.current = null;
+  }
+
+  /** Stops the raw PCM capture graph feeding the voice WebSocket, without
+   * closing the socket itself -- the socket stays open through the review
+   * step so a still-loading transcript can finish arriving and finalize()
+   * can be sent over the same connection. */
+  function teardownPcmCapture() {
+    pcmProcessorRef.current?.disconnect();
+    pcmProcessorRef.current = null;
+    pcmSourceRef.current?.disconnect();
+    pcmSourceRef.current = null;
+    pcmContextRef.current?.close().catch(() => {});
+    pcmContextRef.current = null;
+  }
+
+  function cleanupVoiceSocket() {
+    teardownPcmCapture();
+    const ws = voiceSocketRef.current;
+    if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
+    voiceSocketRef.current = null;
   }
 
   function watchForSilence(stream: MediaStream) {
@@ -244,12 +353,17 @@ export default function ChatPage() {
   async function startRecording() {
     if (recording || pending || recordedClip) return;
     setVoiceError(null);
+    setLiveTranscript("");
+    transcriptPartsRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Parallel MediaRecorder purely so the review screen can play back what
+      // was said -- the transcript itself comes from the streamed PCM below,
+      // not from this blob.
       const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
       const recorder = new MediaRecorder(stream, { mimeType });
       chunksRef.current = [];
-
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
@@ -259,13 +373,45 @@ export default function ChatPage() {
         const extension = mimeType.includes("webm") ? "webm" : "mp4";
         setRecordedClip({ blob, extension, url: URL.createObjectURL(blob) });
       };
-
       recorder.start();
       mediaRecorderRef.current = recorder;
+
+      const ws = new WebSocket(`${WS_BASE}/ws/voice/${threadId.current}`);
+      voiceSocketRef.current = ws;
+      attachVoiceSocketHandlers(ws);
+
+      const pcmContext = new AudioContext({ sampleRate: REALTIME_SAMPLE_RATE });
+      pcmContextRef.current = pcmContext;
+      const source = pcmContext.createMediaStreamSource(stream);
+      pcmSourceRef.current = source;
+      const processor = pcmContext.createScriptProcessor(4096, 1, 1);
+      pcmProcessorRef.current = processor;
+      // ScriptProcessorNode only fires onaudioprocess while connected to a
+      // destination; route through a silent gain so nothing is played back
+      // (would otherwise echo the customer's own mic to their speakers).
+      const silentGain = pcmContext.createGain();
+      silentGain.gain.value = 0;
+
+      processor.onaudioprocess = (e) => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        const resampled = resampleTo24k(e.inputBuffer.getChannelData(0), pcmContext.sampleRate);
+        const pcm = floatTo16BitPCM(resampled);
+        ws.send(JSON.stringify({ type: "audio", audio: int16ToBase64(pcm) }));
+      };
+
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(pcmContext.destination);
+
       setRecording(true);
       watchForSilence(stream);
+      recordingLimitTimeoutRef.current = setTimeout(() => {
+        setVoiceError(`Recording stopped automatically after ${MAX_RECORDING_MS / 1000} seconds.`);
+        stopRecording();
+      }, MAX_RECORDING_MS);
     } catch {
       setVoiceError("Couldn't access your microphone -- check browser permissions and try again.");
+      cleanupVoiceSocket();
     }
   }
 
@@ -274,22 +420,84 @@ export default function ChatPage() {
     mediaRecorderRef.current.stop();
     setRecording(false);
     cleanupSilenceDetection();
+    teardownPcmCapture();
+    const ws = voiceSocketRef.current;
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "stop" }));
   }
 
   function discardRecording() {
     if (recordedClip) URL.revokeObjectURL(recordedClip.url);
     setRecordedClip(null);
+    setLiveTranscript("");
+    transcriptPartsRef.current = [];
+    const ws = voiceSocketRef.current;
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "cancel" }));
+    cleanupVoiceSocket();
   }
 
   function confirmSend() {
-    if (!recordedClip) return;
-    const { blob, extension, url } = recordedClip;
-    URL.revokeObjectURL(url);
+    if (!recordedClip || sending.current) return;
+    const ws = voiceSocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setVoiceError("Voice connection was lost. Please try again.");
+      discardRecording();
+      return;
+    }
+    sending.current = true;
+    setPending(true);
+    const phrase = pickCheckingPhrase();
+    setPendingText(phrase);
+    speakInterim(phrase);
+
+    URL.revokeObjectURL(recordedClip.url);
     setRecordedClip(null);
     const image = attachedImage;
     setAttachedImage(null);
-    sendVoice(blob, extension, image);
+    finalizeImageNameRef.current = image ? image.name : null;
+
+    (async () => {
+      let imageB64: string | null = null;
+      let imageType: string | null = null;
+      if (image) {
+        imageB64 = await fileToBase64(image);
+        imageType = image.type || "image/jpeg";
+      }
+      ws.send(JSON.stringify({ type: "finalize", image: imageB64, image_type: imageType }));
+    })();
   }
+
+  const AUTO_SEND_DELAY_MS = 2000;
+  const autoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelAutoSend() {
+    if (autoSendTimeoutRef.current) {
+      clearTimeout(autoSendTimeoutRef.current);
+      autoSendTimeoutRef.current = null;
+    }
+  }
+
+  /** Auto-sends the recording shortly after it lands on the review screen,
+   * so a customer doesn't have to click through a confirm step for every
+   * turn -- effect-based (not scheduled inside recorder.onstop) specifically
+   * so it always calls the current confirmSend()/attachedImage closure
+   * rather than a stale one captured back when startRecording() ran.
+   * Discarding (or confirmSend() firing first) clears recordedClip, which
+   * unmounts this effect and cancels the pending timer for free.
+   *
+   * Attaching a photo (see the attach-button onClick below) cancels this
+   * timer rather than just letting it race the native file picker -- a
+   * damage-evidence photo is exactly the kind of thing that must not get
+   * silently left off because the 2s window closed while the OS file dialog
+   * was still open. That path falls back to the manual "Send now" button. */
+  useEffect(() => {
+    if (!recordedClip) return;
+    autoSendTimeoutRef.current = setTimeout(() => {
+      autoSendTimeoutRef.current = null;
+      confirmSend();
+    }, AUTO_SEND_DELAY_MS);
+    return cancelAutoSend;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordedClip]);
 
   /** Real customers each get their own device and their own thread_id
    * automatically -- this button exists for testing/demoing multiple
@@ -304,10 +512,13 @@ export default function ChatPage() {
       mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop());
     }
     cleanupSilenceDetection();
+    cleanupVoiceSocket();
     if (recordedClip) URL.revokeObjectURL(recordedClip.url);
 
     threadId.current = crypto.randomUUID();
     sending.current = false;
+    transcriptPartsRef.current = [];
+    finalizeImageNameRef.current = null;
     setMessages([]);
     setInput("");
     setPending(false);
@@ -315,6 +526,7 @@ export default function ChatPage() {
     setRecording(false);
     setRecordedClip(null);
     setVoiceError(null);
+    setLiveTranscript("");
     setAttachedImage(null);
   }
 
@@ -393,6 +605,12 @@ export default function ChatPage() {
 
           {voiceError && <div className="voice-error">{voiceError}</div>}
 
+          {recording && (
+            <div className="voice-live-caption">
+              {liveTranscript || "Listening…"}
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -423,11 +641,18 @@ export default function ChatPage() {
 
           {recordedClip ? (
             <div className="voice-review">
+              {liveTranscript && <div className="voice-transcript-preview">&ldquo;{liveTranscript}&rdquo;</div>}
+              <div className="voice-auto-send-hint">
+                {attachedImage ? "Attached -- click “Send now” when ready" : "Sending automatically…"}
+              </div>
               <audio src={recordedClip.url} controls />
               <button
                 type="button"
                 className="attach-button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  cancelAutoSend();
+                  fileInputRef.current?.click();
+                }}
                 aria-label="Attach a photo"
                 title="Attach a photo (e.g. damage evidence)"
               >
@@ -435,10 +660,10 @@ export default function ChatPage() {
               </button>
               <div className="voice-review-actions">
                 <button type="button" className="voice-discard" onClick={discardRecording}>
-                  Discard
+                  Cancel
                 </button>
                 <button type="button" className="voice-confirm" onClick={confirmSend}>
-                  Send recording →
+                  Send now →
                 </button>
               </div>
             </div>

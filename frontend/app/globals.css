@@ -350,13 +350,41 @@ main { padding: 2rem 1.75rem 3rem; }
   font-size: 0.82rem;
 }
 
+.voice-live-caption {
+  margin: 0 1.25rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 .voice-review {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.9rem;
   padding: 1rem 1.25rem;
   background: var(--paper-raised);
   border-top: 1px solid var(--line);
+}
+
+.voice-transcript-preview {
+  flex: 1 1 100%;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.voice-auto-send-hint {
+  flex: 1 1 100%;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .voice-review audio {
