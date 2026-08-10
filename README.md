@@ -55,11 +55,10 @@ fuller version of this diagram, plus an on-camera narration script, lives in
 
 Voice is push-to-talk over a WebSocket (`/ws/voice/{thread_id}`), not a one-shot record-and-upload. While the
 customer talks, raw mic audio streams to the backend in ~170ms PCM16 chunks, which relays it to an OpenAI Realtime
-session (the current GA API, `client.realtime.connect(...)`, not the older `client.beta.realtime` shape) and gets
-back live, VAD-segmented captions as they speak — visible on both the recording indicator and the review screen.
-Transcription is `gpt-4o-mini-transcribe` with the language pinned to English (`"language": "en"` in the session
-config) — without that pin, short utterances can occasionally get misidentified and transcribed in the wrong
-script entirely.
+session (`client.realtime.connect(...)`) and gets back live, VAD-segmented captions as they speak — visible on
+both the recording indicator and the review screen. Transcription is `gpt-4o-mini-transcribe` with the language
+pinned to English (`"language": "en"` in the session config) — without that pin, short utterances can occasionally
+get misidentified and transcribed in the wrong script entirely.
 
 The Realtime API is also a full speech-to-speech model that can listen, reason, *and* reply — including making its
 own tool calls — over that same connection. That part is deliberately turned off (`turn_detection.create_response:
