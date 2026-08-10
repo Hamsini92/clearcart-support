@@ -111,6 +111,17 @@ def test_digital_goods_denied_even_with_damage_claim():
     assert result["clause"] == "§2.1"
 
 
+def test_damage_claim_denied_without_evidence():
+    """A damage claim within the reporting window still needs a photo --
+    the model cannot waive §4.2 just because the customer described damage
+    convincingly. ORD-1013 (apparel, 3 days since delivery) is well within
+    both the return window and the 7-day damage-reporting deadline, so
+    evidence is the only thing standing between this and an approval."""
+    result = check_refund_policy("ORD-1013", condition="damaged", has_damage_evidence=False)
+    assert result["decision"] == "deny"
+    assert result["clause"] == "§4.2"
+
+
 def test_opened_electronics_missing_accessories_escalates():
     """Opened electronics with accessories missing must not silently qualify
     for the 85% reduced-rate refund -- it needs a human look."""

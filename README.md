@@ -11,6 +11,17 @@ An AI agent that processes or denies e-commerce refund requests for **ClearCart*
 
 ## How it works
 
+ClearCart Support is an AI agent for processing and denying e-commerce refund requests. The application contains
+mock CRM data for 15 customers, order data, and a strict written refund policy.
+
+The core agent is implemented using LangGraph with Claude as the reasoning model. Claude handles natural-language
+understanding and dynamically decides which tools it needs to call; LangGraph provides the agent loop, state
+management, conditional routing, tool execution, verification, and short-term conversational memory.
+
+The important design decision is that Claude does not independently calculate refund eligibility or monetary
+amounts. Those decisions are handled by deterministic Python tools against trusted order data and the written
+refund policy.
+
 ```mermaid
 flowchart TB
     Customer([Customer]) --> ChatUI["Customer Chat UI<br/>text · voice · image"]
@@ -31,9 +42,9 @@ flowchart TB
     class Agent,Anthropic reason;
 ```
 
-Claude (Orchestration layer) decides what to check and which tool to call next. Fixed Python (Business Logic layer)
-computes refund eligibility and dollar amounts — never the model. OpenAI converts speech at the API boundary only;
-it never reasons about a request. A fuller version of this diagram, plus an on-camera narration script, lives in
+Both external providers connect at the layer that actually calls them — OpenAI at the API layer (it converts speech
+only, never reasons), Anthropic at the Orchestration layer (the only place reasoning happens). A fuller version of
+this diagram, plus an on-camera narration script, lives in
 [`docs/demo-prep/architecture-overview.html`](docs/demo-prep/architecture-overview.html).
 
 **Single agent, not multi-agent.** One reasoning loop, five tools, each doing one narrow thing a real support rep could do. See [Future scope](#future-scope) for when multi-agent would actually become the right call.
