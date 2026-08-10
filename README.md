@@ -164,10 +164,6 @@ data/
 
 ## Known limitations & path to production
 
-**No authentication.** The admin dashboard has no access control right now — anyone reaching the URL can see customer data and the full reasoning trace. The customer chat's "identity verification" is just an asked-for email, not a real authenticated session. In production: the admin dashboard needs real auth + role-based access; the customer chat should inherit an authenticated session from the host e-commerce platform (the way real embedded support widgets like Intercom do), not accept a typed, unverified email.
-
-**Voice.** Implemented — push-to-talk, Whisper STT, the same LangGraph agent as text, TTS reply. Known limitations: transcription errors on ambiguous speech (e.g. spoken order numbers) aren't corrected by the agent beyond the order-ID normalization already in `repository.py`; there's no interruption/barge-in while the reply is being spoken; and it depends on OpenAI's API being reachable (Whisper + TTS), separate from Anthropic's, so a voice-specific outage doesn't affect text chat at all since the two are wired to different providers behind the same agent core.
-
 **AWS / cloud deployment.** Not deployed — this runs locally by design for review. Target production architecture: ECS Fargate for the backend, RDS Postgres in place of the flat JSON files (the repository-pattern data layer already isolates this change), S3 + CloudFront for the frontend, an ALB with WebSocket support for the live log stream, Secrets Manager for API keys, GitHub Actions for CI/CD.
 
 ### Future scope
