@@ -85,14 +85,12 @@ OpenAI TTS
 Spoken response
 ```
 
-The Realtime API is also a full speech-to-speech model that can listen, reason, *and* reply — including making its
-own tool calls — over that same connection. That part is deliberately turned off (`turn_detection.create_response:
-false` in `backend/api/main.py`'s `ws_voice()`): letting it stay on would mean GPT, not Claude, approving refunds
-during voice conversations, a second and divergent decision-maker for the same job. So Realtime here is scoped to
-exactly one job — streaming speech-to-text — and the customer's final transcript is handed to the same
-`run_agent_turn()` (Claude) that text chat uses. The reply is spoken back through a plain, deterministic `tts-1`
-call rather than the Realtime API's own generative voice output, since a generative restate of a refund decision
-could paraphrase away a policy citation like "§10.1" — this is a compliance-sensitive reply, not small talk.
+The Realtime API can also listen, reason, and reply on its own — including calling tools — but that's deliberately
+turned off (`turn_detection.create_response: false` in `ws_voice()`), so it never becomes a second, divergent
+decision-maker for refunds. Realtime is scoped to exactly one job — streaming speech-to-text — and the customer's
+final transcript is handed to the same `run_agent_turn()` (Claude) that text chat uses. The reply is spoken back
+through a separate, deterministic `tts-1` call rather than Realtime's own generative voice, so a policy citation
+like "§10.1" can't get paraphrased away in the retelling.
 
 **Review, not a manual send.** Recording stops on a click, on 5 seconds of silence, or at a hard time cap (below).
 It then lands on a review screen showing the live transcript and an audio playback, and auto-sends itself ~2
@@ -114,7 +112,8 @@ open `/admin` while testing voice to see it live, same as any other turn.
 
 | Layer | Choice |
 |---|---|
-| LLM / agent orchestration | Claude (Anthropic API) via LangGraph |
+| LLM reasoning | Claude (Anthropic API) |
+| Agent orchestration | LangGraph |
 | Voice | OpenAI Realtime API (streaming STT) + `tts-1` (reply audio) — Claude remains the sole reasoner |
 | Backend | FastAPI (Python) |
 | Frontend | Next.js (TypeScript) |
