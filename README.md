@@ -240,7 +240,9 @@ data/
 
 ## Known limitations & path to production
 
-**AWS / cloud deployment.** Not deployed — this runs locally by design for review. Target production architecture: ECS Fargate for the backend, RDS Postgres in place of the flat JSON files (the repository-pattern data layer already isolates this change), S3 + CloudFront for the frontend, an ALB with WebSocket support for the live log stream, Secrets Manager for API keys, GitHub Actions for CI/CD.
+This submission runs locally and uses synthetic/mock customer and order data, which is appropriate for the scope of the assessment.
+
+For production, the main changes would be replacing the flat-file repository with a transactional database, deploying the API and frontend behind managed infrastructure, moving secrets to a secret manager, and using a durable pub/sub or event system for multi-instance WebSocket/admin streaming.
 
 ### Future scope
 
