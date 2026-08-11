@@ -5,7 +5,7 @@ An AI agent that processes or denies e-commerce refund requests for **ClearCart*
 - **Customer chat** — a support widget where customers ask about returns/refunds, by typing or by voice
 - **Voice** — push-to-talk over a live WebSocket: the OpenAI Realtime API streams the customer's mic audio to a VAD-segmented transcription, with live captions as they speak, then the same agent reasons over the final transcript, and the reply is spoken back via TTS. Not a separate implementation of the agent — voice and text both call the exact same `run_agent_turn()`, only the I/O differs. Realtime is deliberately used only as a streaming audio layer, not as the reasoner — see [Voice pipeline](#voice-pipeline-openai-realtime-api) below for why.
 - **Image evidence** — a customer claiming damage can attach a photo; Claude's own vision looks at it and judges whether it actually supports the claim before any damage-based refund is considered (policy §4.2).
-- **Admin dashboard** — a live, real-time stream of the agent's reasoning: every tool call, every policy citation, every decision, as it happens
+- **Admin dashboard** — a real-time execution trace of tool calls, policy checks, decisions, retries, and verification events
 - **Deterministic policy engine** — refund eligibility (return windows, non-refundable categories, loyalty exceptions, fraud/abuse checks) is computed in code, not left to the LLM's judgment. The LLM's job is to gather the right information and explain the outcome, not to compute it.
 - **Transient failure handling** — order/CRM lookups can hit a genuine infrastructure hiccup (a timeout, a dropped connection). Those are retried once, automatically, and logged as failed → retrying → recovered in the admin dashboard. A real business outcome like "order not found" is never retried — it isn't a glitch, so retrying it wouldn't help. See `DEMO_FAIL_FIRST_ORDER_LOOKUP` in `.env.example` to trigger this live.
 
@@ -43,9 +43,7 @@ flowchart TB
 ```
 
 Both external providers connect at the layer that actually calls them — OpenAI at the API layer (it converts speech
-only, never reasons or calls tools), Anthropic at the Orchestration layer (the only place reasoning happens). A
-fuller version of this diagram, plus an on-camera narration script, lives in
-[`docs/demo-prep/architecture-overview.html`](docs/demo-prep/architecture-overview.html).
+only, never reasons or calls tools), Anthropic at the Orchestration layer (the only place reasoning happens).
 
 **Single agent, not multi-agent.** One reasoning loop, five tools, each doing one narrow thing a real support rep could do. See [Future scope](#future-scope) for when multi-agent would actually become the right call.
 
@@ -174,10 +172,10 @@ The agent verifies identity before discussing an order — state your name and r
 > *(email: matthew.gardner.2@example.com)*
 → Denied, citing §1 (return window expired). Push back ("I've been a customer forever, can you make an exception?") and it holds the decision.
 
-**Ambiguous order / retry:**
+**Ambiguous order / clarification:**
 > "Hi, this is James Martin. I want to return my oak side table." *(no order ID)*
 > *(email: james.martin.8@example.com)*
-→ Finds two matching orders, asks which one before proceeding — visible as a retry step in the admin log.
+→ Finds two matching orders, asks which one before proceeding — visible as a clarification step in the admin log.
 
 **Voice:** on the chat page, click the mic, speak one of the scenarios above instead of typing it — live captions appear as you talk — then stop and it sends itself a couple seconds later (or click "Send now"/"Cancel" to override). The reply comes back as speech too.
 
